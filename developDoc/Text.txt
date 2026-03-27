@@ -1,0 +1,87 @@
+幫我寫個開發文件
+不需要code
+但如果有API/預期要呼叫API要在文件中例出
+整個系統會部署在https://ip:43255/atbis/
+要用UTF-8
+注意: 未來可能會有手機版本
+index是login page
+
+python 簡單帳單管理系統（要開venv)
+架構：
+openssl for HTTPS
+sqlite
+python
+ubuntu 24
+網頁要：
+1.用bootstrap 
+2.用zh-hk
+功能：
+1.登入頁面
+帳號密碼登入
+其他所有頁面都要登入
+2.修改個人資料頁面
+顯示username但不可改
+顯示display_name可改
+password可改
+（要求：8位密碼，不可與舊密碼一樣）
+3.查看帳目
+選擇群組後
+在bootstrap-table中
+3.1顯示自己和參與群組的即時餘額(預設
+3.2列出自己的帳單細項（用顏色分）和即時餘額（可以用bootstrap-table的filter功能來讓用戶可以只看部份群組或全部的總和那些）
+ps: 管理員可以看到任何成員/群組的帳單細項和即時餘額
+ps: 群組管理員可以看到群組內任何成員/群組的帳單細項和即時餘額
+4.增加帳單記錄（只有管理員/群組管理員可以
+4.1先選群組
+4.2顯示成員以及多選方格（可以選部分成員）以及全選按鈕
+4.3選擇「增值」或「支出」
+4.4選擇是否要平分到每個人
+4.4填數字（大於0）
+4.5 optional remark
+4.6確認記錄
+ps: 新增帳單時用 transaction：insert to bills + bill_splits + update group_members.balance
+5.新增成員（只有管理員）
+輸入新成員的帳號和名稱
+用model顯示成功生成的帳號和密碼，方便複製分發
+6.新建群組(新建者自動成為群組管理員）
+7群組管理（只有管理員/群組管理員）
+選擇要管理的群組後
+7.1.增加成員（必須輸入完整username）
+7.2.修改金錢保管人(如果一個群組沒有金錢保管人，則群組管理員會負責保管金錢）（當一個群組內原本有treasurer時，原本的會變成member）
+
+database
+
+users
+users( id|INTEGER|主鍵自動遞增 PRIMARY KEY,
+username|TEXT|登入帳號（唯一且 NOT NULL）,
+password|TEXT|bcrypt 雜湊密碼,
+display_name|TEXT|顯示姓名（可修改）,
+is_admin|INTEGER|1=全局管理員（預設 0）,
+created_at|DATETIME|帳號建立時間（預設 CURRENT_TIMESTAMP）)
+groups
+groups( id|INTEGER|主鍵自動遞增 PRIMARY KEY,
+name|TEXT|群組名稱（唯一且 NOT NULL）,
+created_at|DATETIME|群組建立時間（預設 CURRENT_TIMESTAMP）,
+created_by|INTEGER|建立者 user_id（外鍵 users.id）)
+group_members
+group_members( id|INTEGER|主鍵自動遞增 PRIMARY KEY,
+group_id|INTEGER|群組ID（外鍵 groups.id）,
+user_id|INTEGER|用戶ID（外鍵 users.id）,
+role|TEXT|角色（member / group_admin / treasurer，預設 member）,
+balance|REAL|該成員在群組的即時餘額（預設 0.0）,
+joined_at|DATETIME|加入時間（預設 CURRENT_TIMESTAMP）,
+UNIQUE(group_id, user_id))
+bills
+bills( id|INTEGER|主鍵自動遞增 PRIMARY KEY,
+group_id|INTEGER|所屬群組ID（外鍵 groups.id）,
+bill_type|TEXT|類型（income=增值 / expense=支出）,
+total_amount|REAL|總金額（>0）,
+is_equal_split|INTEGER|是否平分（1=平分，0=自訂分配，預設1）,
+remark|TEXT|整體備註（可選）,
+created_by|INTEGER|新增者ID（管理員或群組管理員，外鍵 users.id）,
+created_at|DATETIME|建立時間（預設 CURRENT_TIMESTAMP）)
+bill_splits
+bill_splits( id|INTEGER|主鍵自動遞增 PRIMARY KEY,
+bill_id|INTEGER|帳單ID（外鍵 bills.id）,
+user_id|INTEGER|用戶ID（外鍵 users.id）,
+amount|REAL|該用戶金額變化（正=增值，負=支出）)

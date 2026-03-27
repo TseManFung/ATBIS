@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}查看帳目{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+  <h1 class="h4 m-0">查看帳目</h1>
+  <div class="d-flex gap-2 align-items-center">
+    <label for="group-select" class="form-label m-0">群組</label>
+    <select id="group-select" class="form-select">
+      <option value="">全部可見群組</option>
+    </select>
+    <button id="reload-btn" class="btn btn-outline-primary">重新整理</button>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header">餘額</div>
+  <div class="card-body">
+    <table id="balances-table" data-toggle="table" data-search="true" data-pagination="true" data-locale="zh-HK" class="table table-sm">
+      <thead>
+      <tr>
+        <th data-field="group_name" data-sortable="true">群組</th>
+        <th data-field="username" data-sortable="true">帳號</th>
+        <th data-field="display_name" data-sortable="true">名稱</th>
+        <th data-field="keeper" data-sortable="true">金錢保管人</th>
+        <th data-field="balance" data-sortable="true">餘額</th>
+      </tr>
+      </thead>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">帳單明細</div>
+  <div class="card-body">
+    <table id="bills-table" data-toggle="table" data-search="true" data-pagination="true" data-locale="zh-HK" class="table table-sm">
+      <thead>
+      <tr>
+        <th data-field="group_name" data-sortable="true">群組</th>
+        <th data-field="bill_type" data-sortable="true" data-formatter="billTypeFormatter">類型</th>
+        <th data-field="total_amount" data-sortable="true">金額</th>
+        <th data-field="remark">備註</th>
+        <th data-field="created_by" data-sortable="true">建立者</th>
+        <th data-field="created_at" data-sortable="true">時間</th>
+      </tr>
+      </thead>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const reloadBtn = document.getElementById("reload-btn");
+
+  function setReloadLoading(loading) {
+    reloadBtn.disabled = loading;
+    reloadBtn.textContent = loading ? "載入中..." : "重新整理";
+  }
+
+  function billTypeFormatter(value) {
+    if (value === "income") return '<span class="badge text-bg-success">增值</span>';
+    if (value === "expense") return '<span class="badge text-bg-danger">支出</span>';
+    return value;
+  }
+
+  async function loadGroups() {
+    const result = await apiFetch("/api/groups");
+    if (!result.success) {
+      showAlert("global-alert", result.message || "群組載入失敗", "danger");
+      return;
+    }
+    const select = document.getElementById("group-select");
+    for (const g of result.data) {
+      const option = document.createElement("option");
+      option.value = g.id;
+      option.textContent = g.name;
+      select.appendChild(option);
+    }
+  }
+
+  async function loadBills() {
+    setReloadLoading(true);
+    const groupId = document.getElementById("group-select").value;
+    const query = groupId ? `?group_id=${encodeURIComponent(groupId)}` : "";
+    const result = await apiFetch(`/api/bills${query}`);
+    setReloadLoading(false);
+    if (!result.success) {
+      showAlert("global-alert", result.message || "帳目讀取失敗", "danger");
+      return;
+    }
+
+    $("#balances-table").bootstrapTable("load", result.data.balances || []);
+    $("#bills-table").bootstrapTable("load", result.data.bills || []);
+  }
+
+  reloadBtn.addEventListener("click", loadBills);
+  document.getElementById("group-select").addEventListener("change", loadBills);
+
+  (async () => {
+    await loadGroups();
+    await loadBills();
+  })();
+</script>
+{% endblock %}

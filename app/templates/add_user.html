@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}新增成員{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header">新增成員（全局管理員）</div>
+      <div class="card-body">
+        <form id="add-user-form">
+          <div class="mb-3">
+            <label class="form-label">username</label>
+            <input name="username" class="form-control" required title="username" placeholder="請輸入帳號">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">display_name</label>
+            <input name="display_name" class="form-control" required title="display_name" placeholder="請輸入顯示名稱">
+          </div>
+          <button class="btn btn-primary" type="submit">建立新成員</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="passwordModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">新成員帳密</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1">帳號：<strong id="new-username"></strong></p>
+        <p class="mb-1">名稱：<strong id="new-display-name"></strong></p>
+        <p class="mb-0">密碼：<code id="new-password"></code></p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const modal = new bootstrap.Modal(document.getElementById("passwordModal"));
+
+  document.getElementById("add-user-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = new FormData(e.target);
+    const payload = {
+      username: form.get("username"),
+      display_name: form.get("display_name"),
+    };
+
+    const result = await apiFetch("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    if (!result.success) {
+      showAlert("global-alert", result.message || "建立失敗", "danger");
+      return;
+    }
+
+    document.getElementById("new-username").textContent = result.data.username;
+    document.getElementById("new-display-name").textContent = result.data.display_name;
+    document.getElementById("new-password").textContent = result.data.password;
+    modal.show();
+    e.target.reset();
+  });
+</script>
+{% endblock %}

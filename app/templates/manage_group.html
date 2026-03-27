@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}群組管理{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header">群組成員管理</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label">選擇群組</label>
+          <select id="manage-group-id" class="form-select" title="選擇管理群組"></select>
+        </div>
+        <button class="btn btn-outline-primary mb-3" id="refresh-members">讀取成員</button>
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead>
+              <tr><th>帳號</th><th>名稱</th><th>角色</th><th>餘額</th></tr>
+            </thead>
+            <tbody id="member-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card mb-4">
+      <div class="card-header">新增成員到群組</div>
+      <div class="card-body">
+        <form id="add-member-form">
+          <div class="mb-3">
+            <label class="form-label">完整 username</label>
+            <input name="username" class="form-control" required title="完整 username" placeholder="請輸入完整帳號">
+          </div>
+          <button class="btn btn-primary" type="submit">新增</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">修改金錢保管人</div>
+      <div class="card-body">
+        <form id="treasurer-form">
+          <div class="mb-3">
+            <label class="form-label">選擇新保管人</label>
+            <select name="user_id" id="treasurer-user-id" class="form-select" required title="選擇金錢保管人"></select>
+          </div>
+          <button class="btn btn-warning" type="submit">更新</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const groupSelector = document.getElementById("manage-group-id");
+  const memberTbody = document.getElementById("member-tbody");
+  const treasurerSelector = document.getElementById("treasurer-user-id");
+  const treasurerSubmitBtn = document.querySelector("#treasurer-form button[type='submit']");
+
+  function roleLabel(role) {
+    if (role === "group_admin") return "群組管理員";
+    if (role === "treasurer") return "金錢保管人";
+    return "成員";
+  }
+
+  async function loadGroups() {
+    const result = await apiFetch("/api/groups?scope=manage");
+    if (!result.success) {
+      showAlert("global-alert", result.message || "讀取群組失敗", "danger");
+      return;
+    }
+    groupSelector.innerHTML = result.data.map((g) => `<option value="${g.id}">${g.name}</option>`).join("");
+    if (!result.data.length) {
+      showAlert("global-alert", "目前沒有可管理的群組", "warning");
+      memberTbody.innerHTML = "";
+      treasurerSelector.innerHTML = "";
+      treasurerSubmitBtn.disabled = true;
+    }
+  }
+
+  async function loadMembers() {
+    const groupId = Number(groupSelector.value);
+    const result = await apiFetch(`/api/groups/manage?group_id=${encodeURIComponent(groupId)}`);
+    if (!result.success) {
+      showAlert("global-alert", result.message || "讀取成員失敗（需群組管理員以上）", "danger");
+      memberTbody.innerHTML = "";
+      treasurerSelector.innerHTML = "";
+      return;
+    }
+
+    memberTbody.innerHTML = result.data.members.map((m) => `
+      <tr>
+        <td>${m.username}</td>
+        <td>${m.display_name || ""}</td>
+        <td>${roleLabel(m.role)}</td>
+        <td>${Number(m.balance).toFixed(2)}</td>
+      </tr>
+    `).join("");
+
+    const treasurerCandidates = result.data.members.filter((m) => m.role !== "group_admin");
+    treasurerSelector.innerHTML = treasurerCandidates.map((m) => `
+      <option value="${m.user_id}">${m.display_name || m.username} (${m.username})</option>
+    `).join("");
+    treasurerSubmitBtn.disabled = treasurerCandidates.length === 0;
+
+    if (!treasurerCandidates.length) {
+      showAlert("global-alert", "此群組沒有可設定為保管人的成員（群組管理員不可被設為保管人）", "warning");
+    }
+  }
+
+  document.getElementById("refresh-members").addEventListener("click", loadMembers);
+  groupSelector.addEventListener("change", loadMembers);
+
+  document.getElementById("add-member-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = new FormData(e.target);
+    const payload = {
+      group_id: Number(groupSelector.value),
+      username: form.get("username"),
+    };
+
+    const result = await apiFetch("/api/groups/members", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+
+    if (!result.success) {
+      showAlert("global-alert", result.message || "新增成員失敗", "danger");
+      return;
+    }
+
+    showAlert("global-alert", "新增成員成功", "success");
+    e.target.reset();
+    await loadMembers();
+  });
+
+  document.getElementById("treasurer-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = new FormData(e.target);
+    const payload = {
+      group_id: Number(groupSelector.value),
+      user_id: Number(form.get("user_id")),
+    };
+
+    const result = await apiFetch("/api/groups/treasurer", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+
+    if (!result.success) {
+      showAlert("global-alert", result.message || "更新保管人失敗", "danger");
+      return;
+    }
+
+    showAlert("global-alert", "更新保管人成功", "success");
+    await loadMembers();
+  });
+
+  (async () => {
+    await loadGroups();
+    await loadMembers();
+  })();
+</script>
+{% endblock %}

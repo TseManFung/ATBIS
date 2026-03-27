@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}個人資料{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header">修改個人資料</div>
+      <div class="card-body">
+        <form id="profile-form">
+          <div class="mb-3">
+            <label class="form-label">帳號</label>
+            <input class="form-control" value="{{ user.username }}" disabled title="帳號">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">顯示名稱</label>
+            <input class="form-control" name="display_name" value="{{ user.display_name or '' }}" title="顯示名稱" placeholder="請輸入顯示名稱">
+          </div>
+          <hr>
+          <div class="mb-3">
+            <label class="form-label">舊密碼（如要改密碼必填）</label>
+            <input type="password" class="form-control" name="old_password" title="舊密碼" placeholder="如需改密碼請輸入舊密碼">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">新密碼（至少 8 位）</label>
+            <input type="password" class="form-control" name="password" title="新密碼" placeholder="至少 8 位元">
+          </div>
+          <button class="btn btn-primary" type="submit">儲存變更</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById("profile-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = new FormData(e.target);
+    const payload = {
+      display_name: data.get("display_name"),
+    };
+
+    const password = data.get("password");
+    const oldPassword = data.get("old_password");
+    if (password) {
+      payload.password = password;
+      payload.old_password = oldPassword;
+    }
+
+    const result = await apiFetch("/api/profile", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+
+    if (!result.success) {
+      showAlert("global-alert", result.message || "更新失敗", "danger");
+      return;
+    }
+    showAlert("global-alert", "更新成功", "success");
+    e.target.reset();
+  });
+</script>
+{% endblock %}

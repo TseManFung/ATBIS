@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}增加帳單{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-xl-9">
+    <div class="card">
+      <div class="card-header">新增帳單</div>
+      <div class="card-body">
+        <form id="bill-form">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">群組</label>
+              <select name="group_id" id="bill-group" class="form-select" required title="選擇群組"></select>
+            </div>
+            <div class="col-md-6 d-flex align-items-end">
+              <button class="btn btn-outline-secondary" type="button" id="load-members">載入成員</button>
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <label class="form-label m-0">選擇成員</label>
+              <button type="button" class="btn btn-sm btn-outline-primary" id="select-all-members">全選</button>
+            </div>
+            <div id="members-box" class="border rounded p-3 member-grid small"></div>
+          </div>
+
+          <div class="row g-3 mt-1">
+            <div class="col-md-4">
+              <label class="form-label">類型</label>
+              <select name="bill_type" class="form-select" required title="選擇帳單類型">
+                <option value="income">增值</option>
+                <option value="expense">支出</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">分攤方式</label>
+              <select name="is_equal_split" class="form-select" title="選擇分攤方式">
+                <option value="1">平均分攤</option>
+                <option value="0">自訂分攤</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">總金額</label>
+              <input name="total_amount" class="form-control" type="number" step="0.01" min="0.01" required title="輸入總金額" placeholder="例如 100.00">
+            </div>
+          </div>
+
+          <div class="mt-3 d-none" id="custom-amount-wrap">
+            <label class="form-label">自訂分攤金額</label>
+            <div id="custom-amounts" class="small"></div>
+          </div>
+
+          <div class="mt-3">
+            <label class="form-label">備註</label>
+            <input name="remark" class="form-control" maxlength="200" title="備註" placeholder="可留空">
+          </div>
+
+          <button class="btn btn-primary mt-3" type="submit">確認新增</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const groupSelect = document.getElementById("bill-group");
+  const membersBox = document.getElementById("members-box");
+  const customWrap = document.getElementById("custom-amount-wrap");
+  const customAmounts = document.getElementById("custom-amounts");
+  const billForm = document.getElementById("bill-form");
+  const submitBtn = billForm.querySelector("button[type='submit']");
+
+  function setSubmitEnabled(enabled) {
+    submitBtn.disabled = !enabled;
+  }
+
+  async function loadGroups() {
+    const result = await apiFetch("/api/groups?scope=add-bill");
+    if (!result.success) {
+      showAlert("global-alert", result.message || "讀取群組失敗", "danger");
+      setSubmitEnabled(false);
+      return;
+    }
+    groupSelect.innerHTML = "";
+    if (!result.data.length) {
+      membersBox.innerHTML = '<div class="text-muted">目前沒有可用群組</div>';
+      setSubmitEnabled(false);
+      return;
+    }
+
+    for (const g of result.data) {
+      const option = document.createElement("option");
+      option.value = g.id;
+      option.textContent = g.name;
+      groupSelect.appendChild(option);
+    }
+    setSubmitEnabled(true);
+  }
+
+  async function loadMembers() {
+    const groupId = groupSelect.value;
+    if (!groupId) return;
+    const result = await apiFetch(`/api/groups/bill-members?group_id=${encodeURIComponent(groupId)}`);
+    if (!result.success) {
+      showAlert("global-alert", result.message || "你沒有此群組記帳權限", "danger");
+      membersBox.innerHTML = "";
+      setSubmitEnabled(false);
+      return;
+    }
+
+    setSubmitEnabled(true);
+
+    membersBox.innerHTML = result.data.members.map((m) => `
+      <label class="form-check">
+        <input class="form-check-input member-check" type="checkbox" value="${m.user_id}" data-name="${m.display_name || m.username}">
+        <span class="form-check-label">${m.display_name || m.username} (${m.username})</span>
+      </label>
+    `).join("");
+
+    renderCustomAmountInputs();
+  }
+
+  function renderCustomAmountInputs() {
+    const selected = [...document.querySelectorAll(".member-check:checked")];
+    customAmounts.innerHTML = selected.map((node) => `
+      <div class="input-group mb-2">
+        <span class="input-group-text">${node.dataset.name}</span>
+        <input type="number" step="0.01" min="0" class="form-control custom-amount" data-user-id="${node.value}" placeholder="金額">
+      </div>
+    `).join("");
+  }
+
+  function validateCustomAmounts(payload) {
+    if (payload.is_equal_split) {
+      return true;
+    }
+    let running = 0;
+    for (const uid of payload.selected_members) {
+      const raw = payload.member_amounts[String(uid)] ?? payload.member_amounts[uid];
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value < 0) {
+        showAlert("global-alert", "自訂分攤金額必須為大於或等於 0 的數字", "danger");
+        return false;
+      }
+      running += value;
+    }
+    if (Math.abs(running - payload.total_amount) > 0.01) {
+      showAlert("global-alert", "自訂分攤總和必須等於總金額", "danger");
+      return false;
+    }
+    return true;
+  }
+
+  document.getElementById("load-members").addEventListener("click", loadMembers);
+  groupSelect.addEventListener("change", loadMembers);
+  document.getElementById("select-all-members").addEventListener("click", () => {
+    document.querySelectorAll(".member-check").forEach((node) => {
+      node.checked = true;
+    });
+    renderCustomAmountInputs();
+  });
+  membersBox.addEventListener("change", (e) => {
+    if (e.target.classList.contains("member-check")) {
+      renderCustomAmountInputs();
+    }
+  });
+
+  document.querySelector("select[name='is_equal_split']").addEventListener("change", (e) => {
+    customWrap.classList.toggle("d-none", e.target.value !== "0");
+  });
+
+  billForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (submitBtn.disabled) {
+      return;
+    }
+
+    const form = new FormData(e.target);
+    const selected = [...document.querySelectorAll(".member-check:checked")].map((node) => Number(node.value));
+
+    if (!selected.length) {
+      showAlert("global-alert", "請至少選擇一名成員", "danger");
+      return;
+    }
+
+    const payload = {
+      group_id: Number(form.get("group_id")),
+      bill_type: form.get("bill_type"),
+      total_amount: Number(form.get("total_amount")),
+      is_equal_split: form.get("is_equal_split") === "1",
+      remark: form.get("remark"),
+      selected_members: selected,
+    };
+
+    if (!payload.is_equal_split) {
+      const amounts = {};
+      document.querySelectorAll(".custom-amount").forEach((node) => {
+        amounts[node.dataset.userId] = Number(node.value || 0);
+      });
+      payload.member_amounts = amounts;
+    }
+
+    if (!validateCustomAmounts(payload)) {
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "送出中...";
+
+    const result = await apiFetch("/api/bills", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = "確認新增";
+
+    if (!result.success) {
+      showAlert("global-alert", result.message || "新增失敗", "danger");
+      return;
+    }
+    showAlert("global-alert", `新增成功，帳單編號 ${result.data.bill_id}`, "success");
+    e.target.reset();
+    membersBox.innerHTML = "";
+    customAmounts.innerHTML = "";
+  });
+
+  (async () => {
+    await loadGroups();
+    if (groupSelect.value) {
+      await loadMembers();
+    }
+  })();
+</script>
+{% endblock %}
